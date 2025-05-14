@@ -15,14 +15,16 @@ const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 // Webhook handler for inventory level updates
 app.post('/webhook', async (req, res) => {
   try {
-    const { inventory_item_id: inventoryItemId, location_id, available } = req.body;
+    const { inventoryItem: inventory_item_id, location_id, available } = req.body;
 
-    if (!inventoryItemId || !location_id || available === undefined) {
+    if (!inventory_item_id || !location_id || available === undefined) {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
 
     console.log(`Received webhook for inventory update:`, req.body);
+    const inventoryItemId = 'gid://shopify/InventoryItem/${inventory_item_id}';
+    console.log(inventoryItemId);
 
     // Fetch product variants using the inventory_item_id
     const variants = await getAllInventoryItemIds(inventoryItemId);
@@ -94,6 +96,7 @@ async function getAllInventoryItemIds(inventoryItemId) {
     );
 
     const productId = response1.data.data.inventoryItem.variant.product.id;
+    console.log('Product ID: ', productId);
 
     // Step 2: Fetch all variants of the product
     const query2 = `
