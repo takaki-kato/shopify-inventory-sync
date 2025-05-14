@@ -23,11 +23,9 @@ app.post('/webhook', async (req, res) => {
     }
 
     console.log(`Received webhook for inventory update:`, req.body);
-    const inventoryItemId = 'gid://shopify/InventoryItem/${inventory_item_id}';
-    console.log(inventoryItemId);
 
     // Fetch product variants using the inventory_item_id
-    const variants = await getAllInventoryItemIds(inventoryItemId);
+    const variants = await getAllInventoryItemIds(inventory_item_id);
     console.log('Variants Data:', variants);
     
 //     if (variants.length === 0) {
@@ -83,10 +81,15 @@ async function getAllInventoryItemIds(inventoryItemId) {
     }
   `;
 
+  const variables1 = {
+    id: `gid://shopify/InventoryItem/${inventoryItemId}`,
+  };
+  console.log('Inventory Item ID: ', variables1);
+
   try {
     const response1 = await axios.post(
       SHOPIFY_GRAPHQL_ENDPOINT,
-      { query: query1, variables: { id: inventoryItemId } },
+      { query: query1, variables: variables1 },
       {
         headers: {
           'Content-Type': 'application/json',
