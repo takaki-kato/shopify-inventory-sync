@@ -25,8 +25,10 @@ app.post('/webhook', async (req, res) => {
     console.log(`Received webhook for inventory update:`, req.body);
 
     // Fetch product variants using the inventory_item_id
-    const variants = await getAllInventoryItemIds(inventory_item_id);
+    const variants = await getInventoryItemIdsForAllVariants(inventory_item_id);
     console.log('Variants Data:', variants);
+
+    await updateInventoryForAllVariants(variants, location_id, available);
     
 //     if (variants.length === 0) {
 //       console.error("No variants found for inventory_item_id:", inventory_item_id);
@@ -40,7 +42,7 @@ app.post('/webhook', async (req, res) => {
 //       )
 //     );
 
-    console.log(`Inventory levels updated for variants of product ${inventoryItemId}`);
+    console.log(`Inventory levels updated for variants of product ${inventory_item_id}`);
     return res.sendStatus(200); // OK
   } catch (error) {
     console.error("Error syncing inventory:", error);
@@ -48,25 +50,8 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-
-
-// // Fetch all variants for a given inventory_item_id
-// async function getVariantsByInventoryItemId(inventory_item_id) {
-//   try {
-//     const response = await axios.get(`${SHOPIFY_API_URL}/variants.json`, {
-//       headers: {
-//         'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN
-//       }
-//     });
-
-//     return response.data.variants.filter(variant => variant.inventory_item_id === inventory_item_id);
-//   } catch (error) {
-//     console.error("Error fetching variants:", error);
-//     throw new Error("Failed to fetch variants.");
-//   }
-// }
-
-async function getAllInventoryItemIds(inventoryItemId) {
+// Get inventory item IDs of all variants
+async function getInventoryItemIdsForAllVariants(inventoryItemId) {
   // Step 1: Fetch the product ID from the inventory item
   const query1 = `
     query GetProductFromInventoryItem($id: ID!) {
@@ -132,33 +117,67 @@ async function getAllInventoryItemIds(inventoryItemId) {
 
     const variants = response2.data.data.product.variants.edges;
     const inventoryItemIds = variants.map(variant => ({
-      variantId: variant.node.id,
+      // variantId: variant.node.id,
       inventoryItemId: variant.node.inventoryItem.id,
     }));
 
     console.log('Inventory Item IDs:', inventoryItemIds);
+    return inventoryItemIds;
   } catch (error) {
     console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
   }
 }
 
-// Update the inventory level for a specific variant and location
-async function syncInventoryLevel(variant_id, location_id, available) {
-  try {
-    const response = await axios.post(`${SHOPIFY_API_URL}/inventory_levels/set.json`, {
-      location_id,
-      inventory_item_id: variant_id,
-      available
-    }, {
-      headers: {
-        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN
+// Update the inventory level for all variants in specific location
+async function updateInventoryForAllVariants(inventoryItemIds, locationId, available, ) {
+  const query = `
+    mutation SetInventoryQuantities($input: inventorySetQuantitiesInput!) {
+      inventorySetQuantities(input: $input) {
+        inventoryAdjustmentGroup {
+          createdAt
+          changes {
+            name
+            quantityAfterChange
+          }
+        }
+        userErrors {
+          field
+          message
+        }
       }
-    });
+    }
+  `;
 
-    console.log(`Inventory updated for variant ID: ${variant_id} at location ID: ${location_id} with available stock: ${available}`);
+  const variables = {
+    input: {
+      quantities: inventoryItemIds.map(set => ({
+        inventoryItemId: set.inventoryItemId,
+        locationId: locationId,
+        quantity: available,
+      })),
+    },
+  };
+
+  try {
+    const response = await axios.post(
+      SHOPIFY_GRAPHQL_ENDPOINT,
+      { query, variables },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        },
+      }
+    );
+
+    const data = response.data.data.inventorySetQuantities;
+    if (data.userErrors.length > 0) {
+      console.error('Errors:', data.userErrors);
+    } else {
+      console.log('Inventory updated successfully:', data.inventoryAdjustmentGroup.changes);
+    }
   } catch (error) {
-    console.error(`Error updating inventory for variant ID: ${variant_id}`, error);
-    throw new Error(`Failed to sync inventory for variant ID: ${variant_id}`);
+    console.error('Error updating inventory:', error.response?.data || error.message);
   }
 }
 
