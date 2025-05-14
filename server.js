@@ -15,7 +15,7 @@ const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 // Webhook handler for inventory level updates
 app.post('/webhook', async (req, res) => {
   try {
-    const { inventoryItem: inventory_item_id, location_id, available } = req.body;
+    const { inventory_item_id, location_id, available } = req.body;
 
     if (!inventory_item_id || !location_id || available === undefined) {
       console.error("Invalid webhook data:", req.body);
