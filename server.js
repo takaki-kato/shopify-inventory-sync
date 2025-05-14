@@ -8,7 +8,7 @@ app.use(express.json());  // To parse JSON body
 
 const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
-const SHOPIFY_API_URL = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04`;
+const SHOPIFY_API_URL = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
 const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 
@@ -26,18 +26,19 @@ app.post('/webhook', async (req, res) => {
 
     // Fetch product variants using the inventory_item_id
     const variants = await getVariantsByInventoryItemId(inventory_item_id);
+    console.log('Variants Data:', variants);
+    
+//     if (variants.length === 0) {
+//       console.error("No variants found for inventory_item_id:", inventory_item_id);
+//       return res.sendStatus(404); // Not Found
+//     }
 
-    if (variants.length === 0) {
-      console.error("No variants found for inventory_item_id:", inventory_item_id);
-      return res.sendStatus(404); // Not Found
-    }
-
-    // Update inventory for each variant in the specified location
-    await Promise.all(
-      variants.map(variant => 
-        limit(() => syncInventoryLevel(variant.id, location_id, available))
-      )
-    );
+//     // Update inventory for each variant in the specified location
+//     await Promise.all(
+//       variants.map(variant => 
+//         limit(() => syncInventoryLevel(variant.id, location_id, available))
+//       )
+//     );
 
     console.log(`Inventory levels updated for variants of product ${inventory_item_id}`);
     return res.sendStatus(200); // OK
@@ -47,19 +48,74 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// Fetch all variants for a given inventory_item_id
-async function getVariantsByInventoryItemId(inventory_item_id) {
-  try {
-    const response = await axios.get(`${SHOPIFY_API_URL}/variants.json`, {
-      headers: {
-        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN
-      }
-    });
 
-    return response.data.variants.filter(variant => variant.inventory_item_id === inventory_item_id);
+
+// // Fetch all variants for a given inventory_item_id
+// async function getVariantsByInventoryItemId(inventory_item_id) {
+//   try {
+//     const response = await axios.get(`${SHOPIFY_API_URL}/variants.json`, {
+//       headers: {
+//         'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN
+//       }
+//     });
+
+//     return response.data.variants.filter(variant => variant.inventory_item_id === inventory_item_id);
+//   } catch (error) {
+//     console.error("Error fetching variants:", error);
+//     throw new Error("Failed to fetch variants.");
+//   }
+// }
+
+async function getVariantsByInventoryItemId(inventory_item_id) {
+  const query = `
+    query GetVariantsFromInventoryItem($id: ID!) {
+      inventoryItem(id: $id) {
+        id
+        inventoryLevels(first: 1) {
+          edges {
+            node {
+              id
+              location {
+                id
+                name
+              }
+              quantities(names: ["available", "committed", "incoming", "on_hand", "reserved"]) {
+                name
+                quantity
+              }
+            }
+          }
+        }
+        variant {
+          id
+          title
+          product {
+            id
+            title
+          }
+        }
+      }
+    }
+  `;
+
+  const variables = {
+    id: inventory_item_id,
+  };
+
+  try {
+    const response = await axios.post(
+      SHOPIFY_API_URL,
+      { query, variables },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        },
+      }
+    );
+    console.log('Variants Data:', response.data.data.inventoryItem.variant);
   } catch (error) {
-    console.error("Error fetching variants:", error);
-    throw new Error("Failed to fetch variants.");
+    console.error('Error fetching variants:', error.response?.data || error.message);
   }
 }
 
