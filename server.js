@@ -6,18 +6,18 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());  // To parse JSON body
 
-const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
-const SHOPIFY_API_URL = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
+const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
+const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
 const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 
 // Webhook handler for inventory level updates
 app.post('/webhook', async (req, res) => {
   try {
-    const { inventory_item_id, location_id, available } = req.body;
+    const { inventory_item_id: inventoryItemId, location_id, available } = req.body;
 
-    if (!inventory_item_id || !location_id || available === undefined) {
+    if (!inventoryItemId || !location_id || available === undefined) {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
@@ -25,7 +25,7 @@ app.post('/webhook', async (req, res) => {
     console.log(`Received webhook for inventory update:`, req.body);
 
     // Fetch product variants using the inventory_item_id
-    const variants = await getVariantsByInventoryItemId(inventory_item_id);
+    const variants = await getAllInventoryItemIds(inventoryItemId);
     console.log('Variants Data:', variants);
     
 //     if (variants.length === 0) {
@@ -40,7 +40,7 @@ app.post('/webhook', async (req, res) => {
 //       )
 //     );
 
-    console.log(`Inventory levels updated for variants of product ${inventory_item_id}`);
+    console.log(`Inventory levels updated for variants of product ${inventoryItemId}`);
     return res.sendStatus(200); // OK
   } catch (error) {
     console.error("Error syncing inventory:", error);
@@ -66,29 +66,12 @@ app.post('/webhook', async (req, res) => {
 //   }
 // }
 
-async function getVariantsByInventoryItemId(inventory_item_id) {
-  const query = `
-    query GetVariantsFromInventoryItem($id: ID!) {
+async function getAllInventoryItemIds(inventoryItemId) {
+  // Step 1: Fetch the product ID from the inventory item
+  const query1 = `
+    query GetProductFromInventoryItem($id: ID!) {
       inventoryItem(id: $id) {
-        id
-        inventoryLevels(first: 1) {
-          edges {
-            node {
-              id
-              location {
-                id
-                name
-              }
-              quantities(names: ["available", "committed", "incoming", "on_hand", "reserved"]) {
-                name
-                quantity
-              }
-            }
-          }
-        }
         variant {
-          id
-          title
           product {
             id
             title
@@ -98,14 +81,10 @@ async function getVariantsByInventoryItemId(inventory_item_id) {
     }
   `;
 
-  const variables = {
-    id: inventory_item_id,
-  };
-
   try {
-    const response = await axios.post(
-      SHOPIFY_API_URL,
-      { query, variables },
+    const response1 = await axios.post(
+      SHOPIFY_GRAPHQL_ENDPOINT,
+      { query: query1, variables: { id: inventoryItemId } },
       {
         headers: {
           'Content-Type': 'application/json',
@@ -113,9 +92,47 @@ async function getVariantsByInventoryItemId(inventory_item_id) {
         },
       }
     );
-    console.log('Variants Data:', response.data.data.inventoryItem.variant);
+
+    const productId = response1.data.data.inventoryItem.variant.product.id;
+
+    // Step 2: Fetch all variants of the product
+    const query2 = `
+      query GetAllVariantsInventoryItemIds($id: ID!) {
+        product(id: $id) {
+          variants(first: 50) {
+            edges {
+              node {
+                id
+                inventoryItem {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const response2 = await axios.post(
+      SHOPIFY_GRAPHQL_ENDPOINT,
+      { query: query2, variables: { id: productId } },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        },
+      }
+    );
+
+    const variants = response2.data.data.product.variants.edges;
+    const inventoryItemIds = variants.map(variant => ({
+      variantId: variant.node.id,
+      inventoryItemId: variant.node.inventoryItem.id,
+    }));
+
+    console.log('Inventory Item IDs:', inventoryItemIds);
   } catch (error) {
-    console.error('Error fetching variants:', error.response?.data || error.message);
+    console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
   }
 }
 
