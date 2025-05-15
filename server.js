@@ -29,19 +29,7 @@ app.post('/webhook', async (req, res) => {
     console.log('Variants Data:', variants);
 
     await updateInventoryForAllVariants(variants, location_id, available);
-    
-//     if (variants.length === 0) {
-//       console.error("No variants found for inventory_item_id:", inventory_item_id);
-//       return res.sendStatus(404); // Not Found
-//     }
-
-//     // Update inventory for each variant in the specified location
-//     await Promise.all(
-//       variants.map(variant => 
-//         limit(() => syncInventoryLevel(variant.id, location_id, available))
-//       )
-//     );
-
+  
     console.log(`Inventory levels updated for variants of product ${inventory_item_id}`);
     return res.sendStatus(200); // OK
   } catch (error) {
@@ -150,10 +138,12 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
 
   const variables = {
     input: {
+      name: 'available',
+      reason: 'sync',
       quantities: inventoryItemIds.map(set => ({
         inventoryItemId: set.inventoryItemId,
         locationId: locationId,
-        quantity: available,
+        quantities: available,
       })),
     },
   };
