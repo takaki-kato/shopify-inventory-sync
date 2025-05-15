@@ -119,10 +119,11 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
 // Update the inventory level for all variants in specific location
 async function updateInventoryForAllVariants(inventoryItemIds, locationId, available, ) {
   const query = `
-    mutation SetInventoryQuantities($input: inventorySetQuantitiesInput!) {
+    mutation SetInventoryQuantities ($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
         inventoryAdjustmentGroup {
           createdAt
+          reason
           changes {
             name
             quantityAfterChange
@@ -139,9 +140,10 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
   const variables = {
     input: {
       name: 'available',
-      reason: 'sync',
-      quantities: inventoryItemIds.map(set => ({
-        inventoryItemId: set.inventoryItemId,
+      reason: 'correction',
+      ignoreCompareQuantity: true,
+      quantities: inventoryItemIds.map(item => ({
+        inventoryItemId: item.inventoryItemId,
         locationId: locationId,
         quantities: available,
       })),
