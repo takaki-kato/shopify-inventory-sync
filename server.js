@@ -11,6 +11,17 @@ const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
 // const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
+const recentlyUpdated = new Map(); // key = inventory_item_id, value = timestamp
+
+function isRecentlyUpdated(id) {
+  const now = Date.now();
+  const updatedAt = recentlyUpdated.get(id);
+  return updatedAt && (now - updatedAt < 10000); // 10 seconds cooldown
+}
+
+function markAsUpdated(id) {
+  recentlyUpdated.set(id, Date.now());
+}
 
 // Webhook handler for inventory level updates
 app.post('/webhook', async (req, res) => {
@@ -21,15 +32,26 @@ app.post('/webhook', async (req, res) => {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
+    if (isRecentlyUpdated(inventory_item_id)) {
+      // console.log(`Skipping ${inventory_item_id} : recently synced`);
+      return res.sendStatus(200);
+    }
+
     console.log(`Received webhook for inventory update:`, req.body);
+    console.log(`Syncing variants for ${inventory_item_id} at location ${location_id} to quantity ${available}`);
 
     // Fetch product variants using the inventory_item_id
-    const variants = await getInventoryItemIdsForAllVariants(inventory_item_id);
+    const inventoryItemIds = await getInventoryItemIdsForAllVariants(inventory_item_id);
+    if (!inventoryItemIds || inventoryItemIds.length === 0) {
+      return res.sendStatus(500);
+    }
+    // Update invetory for all variants  
+    await updateInventoryForAllVariants(inventoryItemIds, location_id, available);
 
-    await updateInventoryForAllVariants(variants, location_id, available);
-  
-    console.log(`Inventory levels updated for variants of ${inventory_item_id} at ${location_id}`);
+    // Mark all affected items as recently updated
+    inventoryItemIds.forEach(item => markAsUpdated(item.inventoryItemId));
     return res.sendStatus(200); // OK
+    
   } catch (error) {
     console.error("Error syncing inventory:", error);
     return res.sendStatus(500); // Internal Server Error
