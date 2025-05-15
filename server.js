@@ -145,12 +145,12 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
       quantities: inventoryItemIds.map(item => ({
         inventoryItemId: item.inventoryItemId,
         locationId: locationId,
-        quantity: available,
-      })),
+        quantity: available
+      }))
     },
   };
 
-  console.log(variables);
+  console.log(JSON.stringify(variables, null, 2));
 
   try {
     const response = await axios.post(
