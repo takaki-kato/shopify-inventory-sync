@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-const pLimit = require('p-limit');
+// const pLimit = require('p-limit');
 require('dotenv').config();
 
 const app = express();
@@ -10,7 +10,7 @@ const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
-const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
+// const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 
 // Webhook handler for inventory level updates
 app.post('/webhook', async (req, res) => {
@@ -30,7 +30,7 @@ app.post('/webhook', async (req, res) => {
 
     await updateInventoryForAllVariants(variants, location_id, available);
   
-    console.log(`Inventory levels updated for variants of product ${inventory_item_id}`);
+    console.log(`Inventory levels updated for variants of ${inventory_item_id} at ${location_id}`);
     return res.sendStatus(200); // OK
   } catch (error) {
     console.error("Error syncing inventory:", error);
@@ -57,7 +57,6 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
   const variables1 = {
     id: `gid://shopify/InventoryItem/${inventoryItemId}`,
   };
-  console.log('Inventory Item ID: ', variables1);
 
   try {
     const response1 = await axios.post(
@@ -72,7 +71,6 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
     );
 
     const productId = response1.data.data.inventoryItem.variant.product.id;
-    console.log('Product ID: ', productId);
 
     // Step 2: Fetch all variants of the product
     const query2 = `
@@ -121,14 +119,6 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
   const query = `
     mutation SetInventoryQuantities($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
-        inventoryAdjustmentGroup {
-          createdAt
-          reason
-          changes {
-            name
-            quantityAfterChange
-          }
-        }
         userErrors {
           field
           message
@@ -150,7 +140,7 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
     }
   };
 
-  console.log(JSON.stringify(variables, null, 2));
+  // console.log(JSON.stringify(variables, null, 2));
 
   try {
     const response = await axios.post(
@@ -172,7 +162,7 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
     }
   } catch (error) {
   console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
-  return []; // return empty array or throw error
+  // return []; // return empty array or throw error
   }
 }
 
