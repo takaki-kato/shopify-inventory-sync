@@ -21,12 +21,10 @@ app.post('/webhook', async (req, res) => {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
-
     console.log(`Received webhook for inventory update:`, req.body);
 
     // Fetch product variants using the inventory_item_id
     const variants = await getInventoryItemIdsForAllVariants(inventory_item_id);
-    console.log('Variants Data:', variants);
 
     await updateInventoryForAllVariants(variants, location_id, available);
   
@@ -107,7 +105,6 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
       inventoryItemId: variant.node.inventoryItem.id,
     }));
 
-    console.log('Inventory Item IDs:', inventoryItemIds);
     return inventoryItemIds;
   } catch (error) {
     console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
@@ -119,6 +116,14 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
   const query = `
     mutation SetInventoryQuantities($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
+        inventoryAdjustmentGroup {
+          createdAt
+          reason
+          changes {
+            name
+            quantityAfterChange
+          }
+        }      
         userErrors {
           field
           message
@@ -157,9 +162,10 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
     const data = response.data.data.inventorySetQuantities;
     if (data.userErrors.length > 0) {
       console.error('Errors:', data.userErrors);
-    } else {
-      console.log('Inventory updated successfully:', data.inventoryAdjustmentGroup.changes);
-    }
+    } 
+    // else {
+    //   console.log('Inventory updated successfully:', data.inventoryAdjustmentGroup.changes);
+    // }
   } catch (error) {
   console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
   // return []; // return empty array or throw error
