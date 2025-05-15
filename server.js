@@ -117,7 +117,7 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
 }
 
 // Update the inventory level for all variants in specific location
-async function updateInventoryForAllVariants(inventoryItemIds, locationId, available, ) {
+async function updateInventoryForAllVariants(inventoryItemIds, locationId, available) {
   const query = `
     mutation SetInventoryQuantities($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
@@ -144,10 +144,10 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
       ignoreCompareQuantity: true,
       quantities: inventoryItemIds.map(item => ({
         inventoryItemId: item.inventoryItemId,
-        locationId: locationId,
+        locationId: `gid://shopify/Location/${locationId}`,
         quantity: available
       }))
-    },
+    }
   };
 
   console.log(JSON.stringify(variables, null, 2));
@@ -171,7 +171,8 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
       console.log('Inventory updated successfully:', data.inventoryAdjustmentGroup.changes);
     }
   } catch (error) {
-    console.error('Error updating inventory:', error.response?.data || error.message);
+  console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
+  return []; // return empty array or throw error
   }
 }
 
