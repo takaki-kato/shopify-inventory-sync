@@ -119,7 +119,7 @@ async function getInventoryItemIdsForAllVariants(inventoryItemId) {
 // Update the inventory level for all variants in specific location
 async function updateInventoryForAllVariants(inventoryItemIds, locationId, available, ) {
   const query = `
-    mutation SetInventoryQuantities ($input: InventorySetQuantitiesInput!) {
+    mutation SetInventoryQuantities($input: InventorySetQuantitiesInput!) {
       inventorySetQuantities(input: $input) {
         inventoryAdjustmentGroup {
           createdAt
@@ -145,15 +145,17 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
       quantities: inventoryItemIds.map(item => ({
         inventoryItemId: item.inventoryItemId,
         locationId: locationId,
-        quantities: available,
+        quantity: available,
       })),
     },
   };
 
+  console.log(variables);
+
   try {
     const response = await axios.post(
       SHOPIFY_GRAPHQL_ENDPOINT,
-      { query, variables },
+      { query: query, variables: variables },
       {
         headers: {
           'Content-Type': 'application/json',
