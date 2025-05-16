@@ -11,7 +11,7 @@ const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/a
 
 // 🧠 Simple in-memory cache to avoid reprocessing
 const recentlyUpdated = new Map();
-const CACHE_TTL_MS = 5 * 1000; // 30 seconds
+const CACHE_TTL_MS = 15 * 1000; // 30 seconds
 
 function wasRecentlyUpdated(id) {
   const timestamp = recentlyUpdated.get(id);
@@ -45,7 +45,7 @@ app.post('/webhook', async (req, res) => {
     if (!inventoryItemIds || inventoryItemIds.length === 0) {
       return res.sendStatus(500);
     }
-    
+
     // Update invetory for all variants  
     await updateInventoryForAllVariants(inventoryItemIds, location_id, available);
 
