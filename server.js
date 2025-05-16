@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-// const pLimit = require('p-limit');
 require('dotenv').config();
 
 const app = express();
@@ -10,10 +9,9 @@ const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
-// const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
 // 🧠 Simple in-memory cache to avoid reprocessing
 const recentlyUpdated = new Map();
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const CACHE_TTL_MS = 5 * 1000; // 30 seconds
 
 function wasRecentlyUpdated(id) {
   const timestamp = recentlyUpdated.get(id);
@@ -29,25 +27,25 @@ function markAsUpdated(id) {
 app.post('/webhook', async (req, res) => {
   try {
     const { inventory_item_id, location_id, available } = req.body;
-    console.log(inventory_item_id);
-    
+
     if (!inventory_item_id || !location_id || available === undefined) {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
     if (wasRecentlyUpdated(`gid://shopify/InventoryItem/${inventory_item_id}`)) {
-      console.log(`Skipping update for recently updated item: ${inventory_item_id}`);
+      // console.log(`Skipping update for recently updated item: ${inventory_item_id}`);
       return res.sendStatus(200);
     }
 
     console.log(`Received webhook for inventory update:`, req.body);
-    console.log(`Syncing variants for ${inventory_item_id} at location ${location_id} to quantity ${available}`);
+    // console.log(`Syncing variants for ${inventory_item_id} at location ${location_id} to quantity ${available}`);
 
     // Fetch product variants using the inventory_item_id
     const inventoryItemIds = await getInventoryItemIdsForAllVariants(inventory_item_id);
     if (!inventoryItemIds || inventoryItemIds.length === 0) {
       return res.sendStatus(500);
     }
+    
     // Update invetory for all variants  
     await updateInventoryForAllVariants(inventoryItemIds, location_id, available);
 
@@ -168,8 +166,6 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
     }
   };
 
-  // console.log(JSON.stringify(variables, null, 2));
-
   try {
     const response = await axios.post(
       SHOPIFY_GRAPHQL_ENDPOINT,
@@ -182,11 +178,10 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
       }
     );
 
+    console.log('Synced variants: ',inventoryItemIds);
+    
     // Mark each inventory item as recently updated
-    console.log(inventoryItemIds);
     await inventoryItemIds.forEach(item => markAsUpdated(item.inventoryItemId));
-
-
 
     const data = response.data.data.inventorySetQuantities;
     if (data.userErrors.length > 0) {
@@ -197,7 +192,6 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
     // }
   } catch (error) {
   console.error('Error fetching inventory item IDs:', error.response?.data || error.message);
-  // return []; // return empty array or throw error
   }
 }
 
