@@ -11,12 +11,14 @@ const SHOPIFY_SHOP_DOMAIN = process.env.SHOPIFY_SHOP_DOMAIN;
 const SHOPIFY_GRAPHQL_ENDPOINT = `https://${SHOPIFY_SHOP_DOMAIN}.myshopify.com/admin/api/2025-04/graphql.json`;
 
 // const limit = pLimit(2); // Limit to 2 concurrent requests to Shopify API
-const recentlyUpdated = new Map(); // key = inventory_item_id, value = timestamp
+// 🧠 Simple in-memory cache to avoid reprocessing
+const recentlyUpdated = new Map();
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
-function isRecentlyUpdated(id) {
-  const now = Date.now();
-  const updatedAt = recentlyUpdated.get(id);
-  return updatedAt && (now - updatedAt < 10000); // 10 seconds cooldown
+function wasRecentlyUpdated(id) {
+  const timestamp = recentlyUpdated.get(id);
+  if (!timestamp) return false;
+  return Date.now() - timestamp < CACHE_TTL_MS;
 }
 
 function markAsUpdated(id) {
@@ -32,8 +34,8 @@ app.post('/webhook', async (req, res) => {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
-    if (isRecentlyUpdated(inventory_item_id)) {
-      // console.log(`Skipping ${inventory_item_id} : recently synced`);
+    if (wasRecentlyUpdated(inventory_item_id)) {
+      console.log(`Skipping update for recently updated item: ${inventory_item_id}`);
       return res.sendStatus(200);
     }
 
@@ -49,9 +51,9 @@ app.post('/webhook', async (req, res) => {
     await updateInventoryForAllVariants(inventoryItemIds, location_id, available);
 
     // Mark all affected items as recently updated
-    inventoryItemIds.forEach(item => markAsUpdated(item.inventoryItemId));
+    inventoryItemIds.forEach(({ inventoryItemId }) => markAsUpdated(inventoryItemId));
     return res.sendStatus(200); // OK
-    
+
   } catch (error) {
     console.error("Error syncing inventory:", error);
     return res.sendStatus(500); // Internal Server Error
