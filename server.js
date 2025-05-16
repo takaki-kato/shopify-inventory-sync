@@ -29,12 +29,13 @@ function markAsUpdated(id) {
 app.post('/webhook', async (req, res) => {
   try {
     const { inventory_item_id, location_id, available } = req.body;
-
+    console.log(inventory_item_id);
+    
     if (!inventory_item_id || !location_id || available === undefined) {
       console.error("Invalid webhook data:", req.body);
       return res.sendStatus(400); // Bad Request
     }
-    if (wasRecentlyUpdated(inventory_item_id)) {
+    if (wasRecentlyUpdated(`gid://shopify/InventoryItem/${inventory_item_id}`)) {
       console.log(`Skipping update for recently updated item: ${inventory_item_id}`);
       return res.sendStatus(200);
     }
@@ -50,8 +51,6 @@ app.post('/webhook', async (req, res) => {
     // Update invetory for all variants  
     await updateInventoryForAllVariants(inventoryItemIds, location_id, available);
 
-    // Mark all affected items as recently updated
-    inventoryItemIds.forEach(({ inventoryItemId }) => markAsUpdated(inventoryItemId));
     return res.sendStatus(200); // OK
 
   } catch (error) {
@@ -182,6 +181,12 @@ async function updateInventoryForAllVariants(inventoryItemIds, locationId, avail
         },
       }
     );
+
+    // Mark each inventory item as recently updated
+    console.log(inventoryItemIds);
+    await inventoryItemIds.forEach(item => markAsUpdated(item.inventoryItemId));
+
+
 
     const data = response.data.data.inventorySetQuantities;
     if (data.userErrors.length > 0) {
